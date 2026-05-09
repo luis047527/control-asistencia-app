@@ -12,7 +12,7 @@ class ProfileScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFFFFAF7),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 112),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
           children: [
             Row(
               children: [
@@ -37,20 +37,14 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 26),
             const _SectionTitle('INFORMACION LABORAL'),
             const SizedBox(height: 10),
-            const _InfoCard(
-              children: [
-                _InfoRow(Icons.calendar_month_outlined, 'Rol', 'Fotografa'),
-                _InfoRow(Icons.schedule, 'Horario asignado', '09:00 AM - 06:00 PM'),
-                _InfoRow(Icons.sync, 'Tipo de horario', 'Fijo'),
-                _InfoRow(Icons.calendar_today_outlined, 'Dias laborales', 'Lunes a Viernes'),
-              ],
-            ),
+            const _LaborInfoCard(),
             const SizedBox(height: 26),
             const _SectionTitle('CONFIGURACION'),
             const SizedBox(height: 10),
             const _InfoCard(
               children: [
-                _InfoRow(Icons.notifications_none, 'Notificaciones', 'Activo', isSwitch: true),
+                _InfoRow(Icons.notifications_none, 'Notificaciones', 'Activo',
+                    isSwitch: true),
                 _InfoRow(Icons.dark_mode_outlined, 'Tema', 'Claro'),
                 _InfoRow(Icons.language, 'Idioma', 'Espanol'),
               ],
@@ -60,16 +54,47 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 10),
             const _InfoCard(
               children: [
-                _InfoRow(Icons.support_outlined, 'Reportar problema', 'Encontraste algun inconveniente?'),
-                _InfoRow(Icons.headset_mic_outlined, 'Contactar administrador', 'Comunicate con el equipo de soporte'),
+                _InfoRow(Icons.support_outlined, 'Reportar problema',
+                    'Encontraste algun inconveniente?'),
+                _InfoRow(Icons.headset_mic_outlined, 'Contactar administrador',
+                    'Comunicate con el equipo de soporte'),
               ],
             ),
-            const SizedBox(height: 20),
-            _LogoutButton(),
           ],
         ),
       ),
-      bottomNavigationBar: const DesignBottomNav(activeIndex: 3),
+      bottomNavigationBar: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _LogoutFooter(),
+          DesignBottomNav(activeIndex: 3),
+        ],
+      ),
+    );
+  }
+}
+
+class _LaborInfoCard extends StatelessWidget {
+  const _LaborInfoCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: SessionService.getRole(),
+      builder: (context, snapshot) {
+        final role = snapshot.data == 'admin' ? 'Administrador' : 'Empleado';
+
+        return _InfoCard(
+          children: [
+            _InfoRow(Icons.calendar_month_outlined, 'Rol', role),
+            const _InfoRow(
+                Icons.schedule, 'Horario asignado', '09:00 AM - 06:00 PM'),
+            const _InfoRow(Icons.sync, 'Tipo de horario', 'Fijo'),
+            const _InfoRow(Icons.calendar_today_outlined, 'Dias laborales',
+                'Lunes a Viernes'),
+          ],
+        );
+      },
     );
   }
 }
@@ -79,57 +104,71 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFEEDFD8)),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 58,
-            backgroundColor: Color(0xFFE8D0C0),
-            child: Icon(Icons.person, color: AppColors.brown, size: 64),
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: SessionService.getUser(),
+      builder: (context, snapshot) {
+        final user = snapshot.data;
+        final name = (user?['name'] ?? 'Usuario').toString();
+        final email = (user?['email'] ?? 'correo no disponible').toString();
+        final role = (user?['role'] ?? 'employee').toString();
+        final roleLabel = role == 'admin' ? 'Administrador' : 'Empleado';
+
+        return Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFEEDFD8)),
           ),
-          const SizedBox(width: 22),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Ana Rodriguez',
-                  style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Fotografa',
-                  style: TextStyle(
-                    color: AppColors.brown,
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 10),
-                Row(
+          child: Row(
+            children: [
+              const CircleAvatar(
+                radius: 58,
+                backgroundColor: Color(0xFFE8D0C0),
+                child: Icon(Icons.person, color: AppColors.brown, size: 64),
+              ),
+              const SizedBox(width: 22),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.mail_outline, size: 20),
-                    SizedBox(width: 8),
-                    Expanded(child: Text('ana.rodriguez@lumibelli.com')),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 27,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      roleLabel,
+                      style: const TextStyle(
+                        color: AppColors.brown,
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const Icon(Icons.mail_outline, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(email)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Chip(
+                      label: Text('Miembro del equipo'),
+                      backgroundColor: Color(0xFFFFEDE5),
+                    ),
                   ],
                 ),
-                SizedBox(height: 12),
-                Chip(
-                  label: Text('Miembro del equipo'),
-                  backgroundColor: Color(0xFFFFEDE5),
-                ),
-              ],
-            ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.black54, size: 34),
+            ],
           ),
-          const Icon(Icons.chevron_right, color: Colors.black54, size: 34),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -233,28 +272,71 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _LogoutButton extends StatelessWidget {
+class _LogoutFooter extends StatelessWidget {
+  const _LogoutFooter();
+
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFFFFF1E8),
-        foregroundColor: const Color(0xFFC73322),
-        elevation: 0,
-        minimumSize: const Size(double.infinity, 62),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFFAF7),
+        border: Border(
+          top: BorderSide(color: Color(0xFFEEDFD8)),
+        ),
       ),
-      onPressed: () async {
-        await SessionService.logout();
-        if (context.mounted) {
-          Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
-        }
-      },
-      icon: const Icon(Icons.logout, size: 28),
-      label: const Text(
-        'Cerrar sesion',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.red,
+          side: const BorderSide(color: Color(0xFFE8A69E)),
+          minimumSize: const Size(double.infinity, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        onPressed: () => _confirmLogout(context),
+        icon: const Icon(Icons.logout, size: 24),
+        label: const Text(
+          'Cerrar sesion',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        ),
       ),
     );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Cerrar sesion'),
+          content: const Text('Estas seguro de que quieres cerrar sesion?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.logout),
+              label: const Text('Cerrar sesion'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLogout != true || !context.mounted) return;
+
+    await SessionService.logout();
+
+    if (context.mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+    }
   }
 }

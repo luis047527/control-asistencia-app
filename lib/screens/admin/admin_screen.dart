@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/session_service.dart';
 import '../shared/admin_bottom_nav.dart';
 import '../shared/app_shell.dart';
 
@@ -8,20 +9,28 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final people = [
-      _Person('Ana Rodriguez', 'Fotografa', 'Tarde', '09:18 AM', AppColors.amber, Icons.schedule),
-      _Person('Pedro Estrada', 'Editor', 'Tarde', '09:07 AM', AppColors.amber, Icons.schedule),
-      _Person('Maria Lopez', 'Asistente', 'Trabajando', '08:58 AM', AppColors.green, Icons.check_circle_outline),
-      _Person('Jorge Martinez', 'Videografo', 'Trabajando', '08:45 AM', AppColors.green, Icons.check_circle_outline),
-      _Person('Lucia Gomez', 'Disenadora', 'Trabajando', '08:50 AM', AppColors.green, Icons.check_circle_outline),
-      _Person('Carlos Sanchez', 'Asistente', 'Ausente', '-', AppColors.red, Icons.person_off_outlined),
-      _Person('Valeria Torres', 'Maquillista', 'Ausente', '-', AppColors.red, Icons.person_off_outlined),
+      _Person('Ana Rodriguez', 'Fotografa', 'Tarde', '09:18 AM',
+          AppColors.amber, Icons.schedule),
+      _Person('Pedro Estrada', 'Editor', 'Tarde', '09:07 AM', AppColors.amber,
+          Icons.schedule),
+      _Person('Maria Lopez', 'Asistente', 'Trabajando', '08:58 AM',
+          AppColors.green, Icons.check_circle_outline),
+      _Person('Jorge Martinez', 'Videografo', 'Trabajando', '08:45 AM',
+          AppColors.green, Icons.check_circle_outline),
+      _Person('Lucia Gomez', 'Disenadora', 'Trabajando', '08:50 AM',
+          AppColors.green, Icons.check_circle_outline),
+      _Person('Carlos Sanchez', 'Asistente', 'Ausente', '-', AppColors.red,
+          Icons.person_off_outlined),
+      _Person('Valeria Torres', 'Maquillista', 'Ausente', '-', AppColors.red,
+          Icons.person_off_outlined),
     ];
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFFAF7),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.page, 18, AppSpacing.page, AppSpacing.bottomPadding),
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.page, 18, AppSpacing.page, AppSpacing.bottomPadding),
           children: [
             const _Header(),
             const SizedBox(height: 16),
@@ -61,27 +70,86 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Panel de control', style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold)),
+              Text('Panel de control',
+                  style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold)),
               SizedBox(height: 3),
-              Text('Viernes, 24 de mayo', style: TextStyle(color: AppColors.muted)),
+              Text('Viernes, 24 de mayo',
+                  style: TextStyle(color: AppColors.muted)),
             ],
           ),
         ),
-        Stack(
-          children: const [
-            Icon(Icons.notifications_none, size: 30, color: AppColors.darkBrown),
-            Positioned(
-              right: 0,
-              child: CircleAvatar(
-                radius: 9,
-                backgroundColor: Color(0xFFE04A25),
-                child: Text('3', style: TextStyle(color: Colors.white, fontSize: 10)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              children: const [
+                Icon(
+                  Icons.notifications_none,
+                  size: 30,
+                  color: AppColors.darkBrown,
+                ),
+                Positioned(
+                  right: 0,
+                  child: CircleAvatar(
+                    radius: 9,
+                    backgroundColor: Color(0xFFE04A25),
+                    child: Text(
+                      '3',
+                      style: TextStyle(color: Colors.white, fontSize: 10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Cerrar sesion',
+              icon: const Icon(
+                Icons.logout,
+                size: 28,
+                color: AppColors.darkBrown,
               ),
+              onPressed: () => _confirmLogout(context),
             ),
           ],
         ),
       ],
     );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Cerrar sesion'),
+          content: const Text('Estas seguro de que quieres cerrar sesion?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.logout),
+              label: const Text('Cerrar sesion'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLogout != true || !context.mounted) return;
+
+    await SessionService.logout();
+
+    if (context.mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+    }
   }
 }
 
@@ -94,17 +162,25 @@ class _MetricGrid extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: _Metric(Icons.groups_outlined, '12', 'Presentes', 'Ahora', AppColors.green)),
+            Expanded(
+                child: _Metric(Icons.groups_outlined, '12', 'Presentes',
+                    'Ahora', AppColors.green)),
             SizedBox(width: 10),
-            Expanded(child: _Metric(Icons.schedule, '3', 'Tardanzas', 'Hoy', Color(0xFFD88400))),
+            Expanded(
+                child: _Metric(Icons.schedule, '3', 'Tardanzas', 'Hoy',
+                    Color(0xFFD88400))),
           ],
         ),
         SizedBox(height: 10),
         Row(
           children: [
-            Expanded(child: _Metric(Icons.person_off_outlined, '2', 'Ausentes', 'Hoy', AppColors.red)),
+            Expanded(
+                child: _Metric(Icons.person_off_outlined, '2', 'Ausentes',
+                    'Hoy', AppColors.red)),
             SizedBox(width: 10),
-            Expanded(child: _Metric(Icons.group_outlined, '17', 'Personal', 'Activos', AppColors.brown)),
+            Expanded(
+                child: _Metric(Icons.group_outlined, '17', 'Personal',
+                    'Activos', AppColors.brown)),
           ],
         ),
       ],
@@ -128,14 +204,22 @@ class _Metric extends StatelessWidget {
       decoration: _card(),
       child: Row(
         children: [
-          CircleAvatar(radius: 24, backgroundColor: color.withOpacity(0.12), child: Icon(icon, color: color)),
+          CircleAvatar(
+              radius: 24,
+              backgroundColor: color.withOpacity(0.12),
+              child: Icon(icon, color: color)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color)),
-                Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(value,
+                    style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: color)),
+                Text(label,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 Text(sub, style: TextStyle(color: color, fontSize: 12)),
               ],
             ),
@@ -153,12 +237,18 @@ class _AlertCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: const Color(0xFFFFF0E8), borderRadius: BorderRadius.circular(AppSpacing.radius)),
+      decoration: BoxDecoration(
+          color: const Color(0xFFFFF0E8),
+          borderRadius: BorderRadius.circular(AppSpacing.radius)),
       child: const Row(
         children: [
-          CircleAvatar(backgroundColor: Color(0xFFFFD9C5), child: Icon(Icons.warning_amber, color: Color(0xFFD84A32))),
+          CircleAvatar(
+              backgroundColor: Color(0xFFFFD9C5),
+              child: Icon(Icons.warning_amber, color: Color(0xFFD84A32))),
           SizedBox(width: 12),
-          Expanded(child: Text('3 personas llegaron tarde\n2 personas aun no marcan entrada')),
+          Expanded(
+              child: Text(
+                  '3 personas llegaron tarde\n2 personas aun no marcan entrada')),
           Icon(Icons.chevron_right),
         ],
       ),
@@ -198,8 +288,13 @@ class _Chip extends StatelessWidget {
       width: 124,
       margin: const EdgeInsets.only(right: 8),
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: active ? AppColors.brown : const Color(0xFFFBF5F1), borderRadius: BorderRadius.circular(14)),
-      child: Text(text, style: TextStyle(color: active ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+          color: active ? AppColors.brown : const Color(0xFFFBF5F1),
+          borderRadius: BorderRadius.circular(14)),
+      child: Text(text,
+          style: TextStyle(
+              color: active ? Colors.white : Colors.black,
+              fontWeight: FontWeight.bold)),
     );
   }
 }
@@ -211,7 +306,9 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Row(
       children: [
-        Expanded(child: Text('Estado del equipo', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold))),
+        Expanded(
+            child: Text('Estado del equipo',
+                style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold))),
         Text('09:41 AM', style: TextStyle(color: AppColors.muted)),
         SizedBox(width: 6),
         Icon(Icons.refresh, color: AppColors.muted, size: 18),
@@ -234,20 +331,27 @@ class _PersonCard extends StatelessWidget {
       decoration: _card(),
       child: Row(
         children: [
-          const CircleAvatar(radius: 28, backgroundColor: Color(0xFFE8D0C0), child: Icon(Icons.person, color: AppColors.brown)),
+          const CircleAvatar(
+              radius: 28,
+              backgroundColor: Color(0xFFE8D0C0),
+              child: Icon(Icons.person, color: AppColors.brown)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(person.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(person.role, style: const TextStyle(color: AppColors.muted)),
+                Text(person.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(person.role,
+                    style: const TextStyle(color: AppColors.muted)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     _StatusChip(person.status, person.color, person.icon),
                     const Spacer(),
-                    Text(isAbsent ? 'Sin entrada' : person.time, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(isAbsent ? 'Sin entrada' : person.time,
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
                 ),
               ],
@@ -271,12 +375,16 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(18)),
       child: Row(
         children: [
           Icon(icon, color: color, size: 16),
           const SizedBox(width: 5),
-          Text(text, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(text,
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.bold, fontSize: 12)),
         ],
       ),
     );
@@ -290,11 +398,14 @@ class _QuickActions extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFFFFF8F3), borderRadius: BorderRadius.circular(AppSpacing.radius)),
+      decoration: BoxDecoration(
+          color: const Color(0xFFFFF8F3),
+          borderRadius: BorderRadius.circular(AppSpacing.radius)),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Acciones rapidas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text('Acciones rapidas',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           SizedBox(height: 14),
           Row(
             children: [
@@ -319,7 +430,9 @@ class _Action extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        CircleAvatar(backgroundColor: Color(0xFFFFE2D1), child: Icon(icon, color: AppColors.brown)),
+        CircleAvatar(
+            backgroundColor: Color(0xFFFFE2D1),
+            child: Icon(icon, color: AppColors.brown)),
         SizedBox(height: 8),
         Text(text),
       ],
@@ -335,7 +448,8 @@ class _Person {
   final Color color;
   final IconData icon;
 
-  const _Person(this.name, this.role, this.status, this.time, this.color, this.icon);
+  const _Person(
+      this.name, this.role, this.status, this.time, this.color, this.icon);
 }
 
 BoxDecoration _card() => BoxDecoration(
