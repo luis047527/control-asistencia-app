@@ -69,11 +69,30 @@ class HistoryScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFFFFAF7),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.page, 14, AppSpacing.page, AppSpacing.bottomPadding),
+        child: Column(
           children: [
-            _Header(),
+
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.page,
+                14,
+                AppSpacing.page,
+                0,
+              ),
+              child: _Header(),
+            ),
+
             const SizedBox(height: 20),
+
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.page,
+                  0,
+                  AppSpacing.page,
+                  AppSpacing.bottomPadding,
+                ),
+                children: [
             _ShellCard(
               child: Column(
                 children: [
@@ -94,40 +113,34 @@ class HistoryScreen extends StatelessWidget {
           ],
         ),
       ),
+    ],
+  ),
+),
       bottomNavigationBar: const DesignBottomNav(activeIndex: 1),
     );
   }
 }
 
 class _Header extends StatelessWidget {
+  const _Header();
+
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back, size: 30),
-          color: AppColors.darkBrown,
-          onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
-        ),
+
         const Expanded(
-          child: Column(
-            children: [
-              Text(
-                'Historial',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.darkBrown,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Registro de asistencia',
-                style: TextStyle(color: AppColors.muted, fontSize: 17),
-              ),
-            ],
+          child: Text(
+            'Historial',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: AppColors.darkBrown,
+            ),
           ),
         ),
+
         Container(
           width: 54,
           height: 54,
@@ -142,13 +155,15 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(Icons.filter_alt_outlined, color: AppColors.brown),
+          child: const Icon(
+            Icons.filter_alt_outlined,
+            color: AppColors.brown,
+          ),
         ),
       ],
     );
   }
 }
-
 class _ShellCard extends StatelessWidget {
   final Widget child;
 
@@ -595,3 +610,4 @@ class _HistoryRecord {
     this.highlightTotal = false,
   });
 }
+

@@ -1,5 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'monthly_attendance_calendar.dart';
 import '../shared/app_shell.dart';
+
+
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -23,9 +26,7 @@ class HomeScreen extends StatelessWidget {
           SizedBox(height: 6),
           _WorkingSessionCard(),
           SizedBox(height: 18),
-          _DaySummarySection(),
-          SizedBox(height: 18),
-          _BalanceGeneralSection(),
+          MonthlyAttendanceCalendar(),
           SizedBox(height: 18),
           _MotivationBanner(),
           SizedBox(height: 12),
@@ -81,7 +82,7 @@ class _WorkingSessionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Estás trabajando',
+                      'Est?s trabajando',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -154,101 +155,6 @@ class _WorkingSessionCard extends StatelessWidget {
   }
 }
 
-class _DaySummarySection extends StatelessWidget {
-  const _DaySummarySection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Resumen del día',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: const [
-            Expanded(
-              child: _LargeStatCard(
-                icon: Icons.schedule,
-                label: 'Horas requeridas',
-                value: '8h 00m',
-              ),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: _LargeStatCard(
-                icon: Icons.work_outline,
-                label: 'Horas trabajadas',
-                value: '03h 41m',
-                valueColor: AppColors.green,
-              ),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: _LargeStatCard(
-                icon: Icons.trending_up,
-                label: 'Balance del día',
-                value: '+04h 19m',
-                valueColor: AppColors.green,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _BalanceGeneralSection extends StatelessWidget {
-  const _BalanceGeneralSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Balance general',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: const [
-            Expanded(
-              child: _MiniStatCard(
-                icon: Icons.arrow_upward,
-                label: 'Horas a favor',
-                value: '+12h 30m',
-                iconColor: AppColors.green,
-              ),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: _MiniStatCard(
-                icon: Icons.arrow_downward,
-                label: 'Horas en contra',
-                value: '-02h 15m',
-                iconColor: AppColors.red,
-              ),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: _MiniStatCard(
-                icon: Icons.balance,
-                label: 'Balance total',
-                value: '+10h 15m',
-                iconColor: AppColors.brown,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
 class _MotivationBanner extends StatelessWidget {
   const _MotivationBanner();
 
@@ -269,7 +175,7 @@ class _MotivationBanner extends StatelessWidget {
           const SizedBox(width: 14),
           const Expanded(
             child: Text(
-              '¡Buen trabajo! Lleva una excelente semana. Mantén tu constancia.',
+              '?Buen trabajo! Lleva una excelente semana. Mant?n tu constancia.',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
             ),
           ),
@@ -429,3 +335,89 @@ class _MiniStatCard extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
+class LegendItem extends StatelessWidget {
+
+  final Color color;
+  final String label;
+
+  const LegendItem({
+    super.key,
+    required this.color,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF8D6E63),
+            fontSize: 14,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LegendItem({
+    required this.color,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.muted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+
+
+
+

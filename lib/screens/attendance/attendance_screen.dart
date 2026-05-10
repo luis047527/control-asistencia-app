@@ -115,12 +115,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFFAF7),
-      body: SafeArea(
+     body: SafeArea(
+  child: Column(
+    children: [
+
+      const Padding(
+        padding: EdgeInsets.fromLTRB(18, 16, 18, 0),
+        child: _Header(),
+      ),
+
+      const SizedBox(height: 22),
+
+      Expanded(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 110),
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 110),
           children: [
-            const _Header(),
-            const SizedBox(height: 22),
+
             _MainAttendanceCard(
               time: _time,
               period: _period,
@@ -131,9 +141,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               checkedOut: checkedOut,
               onTap: _registerAttendance,
             ),
-          ],
+                 ],
         ),
       ),
+    ],
+  ),
+),
       bottomNavigationBar: const _AttendanceBottomNav(),
     );
   }
@@ -146,38 +159,22 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back),
-          color: AppColors.darkBrown,
-          onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
-        ),
-        const SizedBox(width: 4),
-        const Expanded(
+        
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
+            children: const [
               Text(
                 'Registro de Asistencia',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: 30,
                   fontWeight: FontWeight.bold,
                   color: AppColors.darkBrown,
                 ),
               ),
             ],
           ),
-        ),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.brown,
-            side: const BorderSide(color: Color(0xFFEECDBF)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
-            ),
-          ),
-          onPressed: () => Navigator.pushNamed(context, '/history'),
-          icon: const Icon(Icons.history, size: 18),
-          label: const Text('Historial'),
         ),
       ],
     );
@@ -444,71 +441,137 @@ class _DaySummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: const Color(0xFFEEDFD8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+
           const Row(
             children: [
               Icon(Icons.bar_chart, color: AppColors.brown),
-              SizedBox(width: 8),
+              SizedBox(width: 10),
               Text(
                 'Resumen del dia',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                  color: AppColors.darkBrown,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 20),
+
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF3EC),
-              borderRadius: BorderRadius.circular(16),
+              color: const Color(0xFFFFF6F1),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: const Color(0xFFEEDFD8)),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            child: Column(
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFFE2D1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.schedule, color: AppColors.brown),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Horario asignado',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Row(
+                    children: [
+
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFFE2D1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.schedule,
+                          color: AppColors.brown,
+                          size: 36,
                         ),
                       ),
-                      SizedBox(height: 6),
-                      Text(
-                        '09:00 AM - 06:00 PM',
-                        style: TextStyle(fontSize: 16),
+
+                      const SizedBox(width: 16),
+
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+
+                            Text(
+                              'Horario asignado',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 22,
+                                color: AppColors.darkBrown,
+                              ),
+                            ),
+
+                            SizedBox(height: 8),
+
+                            Text(
+                              '09:00 AM - 06:00 PM',
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: AppColors.brown,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
+
+                
+
+                _PremiumStatusRow(
+                  icon: Icons.login,
+                  title: 'Entrada registrada',
+                  value: '08:54 AM',
+                  badge: 'Temprano',
+                  badgeColor: Color(0xFFE6F4E8),
+                  textColor: AppColors.green,
+                ),
+
+                const Divider(
+                  height: 1,
+                  color: Color(0xFFEAD9D1),
+                ),
+
+                _PremiumStatusRow(
+                  icon: Icons.logout,
+                  title: 'Salida registrada',
+                  value: checkedOut ? '06:00 PM' : '--:--',
+                  badge: checkedOut ? 'Completado' : 'Pendiente',
+                  badgeColor: checkedOut
+                      ? const Color(0xFFE6F4E8)
+                      : const Color(0xFFF1F1F1),
+                  textColor: checkedOut
+                      ? AppColors.green
+                      : Colors.grey,
+                ),
+
+                const Divider(
+                  height: 1,
+                  color: Color(0xFFEAD9D1),
+                ),
+
+                
               ],
             ),
           ),
-          const SizedBox(height: 18),
+
+          const SizedBox(height: 22),
+
           Row(
             children: [
+
               const Expanded(
                 child: _SummaryMetric(
                   icon: Icons.work_outline,
@@ -516,7 +579,9 @@ class _DaySummary extends StatelessWidget {
                   value: '8h 00m',
                 ),
               ),
+
               const SizedBox(width: 10),
+
               Expanded(
                 child: _SummaryMetric(
                   icon: Icons.timer_outlined,
@@ -524,7 +589,9 @@ class _DaySummary extends StatelessWidget {
                   value: checkedOut ? '08h 00m' : '00h 00m',
                 ),
               ),
+
               const SizedBox(width: 10),
+
               Expanded(
                 child: _SummaryMetric(
                   icon: Icons.balance,
@@ -534,6 +601,171 @@ class _DaySummary extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PremiumStatusRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final String badge;
+  final Color badgeColor;
+  final Color textColor;
+
+  const _PremiumStatusRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.badge,
+    required this.badgeColor,
+    required this.textColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFE2D1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: AppColors.darkBrown,
+              size: 28,
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: AppColors.darkBrown,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badgeColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    badge,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PremiumDayState extends StatelessWidget {
+  const _PremiumDayState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFE2D1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check_circle_outline,
+              color: AppColors.darkBrown,
+              size: 28,
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          const Expanded(
+            child: Text(
+              'Estado del dia',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
+              ),
+            ),
+          ),
+
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 8,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE6F4E8),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+
+                Icon(
+                  Icons.circle,
+                  size: 10,
+                  color: AppColors.green,
+                ),
+
+                SizedBox(width: 6),
+
+                Text(
+                  'A tiempo',
+                  style: TextStyle(
+                    color: AppColors.green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -755,3 +987,4 @@ class _RegisterNavItem extends StatelessWidget {
     );
   }
 }
+

@@ -3,172 +3,192 @@
 class MetricsSection extends StatelessWidget {
   const MetricsSection({super.key});
 
-  static const _brown = Color(0xFF5D4037);
   static const _green = Color(0xFF2E7D32);
+  static const _orange = Color(0xFFE59A2E);
   static const _red = Color(0xFFC62828);
   static const _soft = Color(0xFFF3E6DD);
+  static const _muted = Color(0xFF8D6E63);
+  static const _brown = Color(0xFF5D4037);
+
+  static const List<Map<String, dynamic>> _days = [
+    {'status': 'success'},
+    {'status': 'success'},
+    {'status': 'late'},
+    {'status': 'success'},
+    {'status': 'danger'},
+    {'status': 'none'},
+    {'status': 'none'},
+  ];
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'success':
+        return _green;
+
+      case 'late':
+        return _orange;
+
+      case 'danger':
+        return _red;
+
+      default:
+        return const Color(0xFFE9DED8);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-
-        // =========================
-        // RESUMEN DEL DIA
-        // =========================
-        const Text("Resumen del día",
-            style: TextStyle(fontWeight: FontWeight.bold)),
-
-        const SizedBox(height: 10),
-
-        _card([
-          _metric(
-            icon: Icons.access_time,
-            label: "Horas requeridas",
-            value: "8h 00m",
-          ),
-          _divider(),
-          _metric(
-            icon: Icons.work_outline,
-            label: "Horas trabajadas",
-            value: "04h 44m",
-            color: _green,
-          ),
-        ]),
-
-        const SizedBox(height: 10),
-
-        _card([
-          _metric(
-            icon: Icons.trending_up,
-            label: "Balance del día",
-            value: "+04h 19m",
-            color: _green,
-            sub: "A tu favor",
-          ),
-        ]),
-
-        const SizedBox(height: 20),
-
-        // =========================
-        // BALANCE GENERAL
-        // =========================
-        const Text("Balance general",
-            style: TextStyle(fontWeight: FontWeight.bold)),
-
-        const SizedBox(height: 10),
-
-        _card([
-          _metric(
-            icon: Icons.trending_up,
-            label: "Horas a favor",
-            value: "+12h 30m",
-            color: _green,
-          ),
-          _divider(),
-          _metric(
-            icon: Icons.history,
-            label: "Horas en contra",
-            value: "-02h 15m",
-            color: _red,
-          ),
-        ]),
-
-        const SizedBox(height: 10),
-
-        _card([
-          _metric(
-            icon: Icons.balance,
-            label: "Balance total",
-            value: "+10h 15m",
-          ),
-        ]),
-      ],
-    );
-  }
-
-  // =========================
-  // CARD CONTENEDOR
-  // =========================
-  Widget _card(List<Widget> children) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
       ),
-      child: Row(children: children),
-    );
-  }
-
-  // =========================
-  // ITEM METRICA COMPLETO
-  // =========================
-  Widget _metric({
-    required IconData icon,
-    required String label,
-    required String value,
-    Color? color,
-    String? sub,
-  }) {
-    return Expanded(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
 
-          // ICONO
-          Container(
-            width: 42,
-            height: 42,
-            decoration: const BoxDecoration(
-              color: _soft,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: _brown),
+          Row(
+            children: [
+
+              const Expanded(
+                child: Text(
+                  'Asistencia mensual',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: _brown,
+                  ),
+                ),
+              ),
+
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: _soft,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Text(
+                  'Mayo',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _brown,
+                  ),
+                ),
+              ),
+            ],
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 24),
 
-          // LABEL COMPLETO
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: 31,
+            gridDelegate:
+                const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+            itemBuilder: (context, index) {
+
+              final day = index + 1;
+
+              String status = 'none';
+
+              if (day <= 18) {
+                status = _days[index % _days.length]['status'];
+              }
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: _statusColor(status).withOpacity(
+                    status == 'none' ? 0.35 : 0.15,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: _statusColor(status).withOpacity(0.25),
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    '$day',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: status == 'none'
+                          ? _muted
+                          : _statusColor(status),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
 
-          const SizedBox(height: 4),
+          const SizedBox(height: 26),
 
-          // VALOR
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            softWrap: true,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              color: color ?? Colors.black,
-            ),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+
+              _LegendItem(
+                color: _green,
+                label: 'Completo',
+              ),
+
+              _LegendItem(
+                color: _orange,
+                label: 'Tardanza',
+              ),
+
+              _LegendItem(
+                color: _red,
+                label: 'Falta',
+              ),
+            ],
           ),
-
-          // SUBTEXTO
-          if (sub != null)
-            Text(
-              sub,
-              style: const TextStyle(fontSize: 11),
-            ),
         ],
       ),
     );
   }
+}
 
-  // =========================
-  // DIVISOR VERTICAL
-  // =========================
-  Widget _divider() {
-    return Container(
-      width: 1,
-      height: 60,
-      color: Colors.grey.withOpacity(0.2),
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LegendItem({
+    required this.color,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF8D6E63),
+          ),
+        ),
+      ],
     );
   }
 }

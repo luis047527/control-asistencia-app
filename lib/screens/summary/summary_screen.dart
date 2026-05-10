@@ -27,7 +27,7 @@ class SummaryScreen extends StatelessWidget {
             SizedBox(height: 14),
             _InsightCard(),
             SizedBox(height: 14),
-            _HistoryLinkCard(),
+
           ],
         ),
       ),
@@ -673,38 +673,6 @@ class _InsightCard extends StatelessWidget {
   }
 }
 
-class _HistoryLinkCard extends StatelessWidget {
-  const _HistoryLinkCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEEDFD8)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.receipt_long_outlined, color: AppColors.darkBrown),
-          const SizedBox(width: 16),
-          const Expanded(
-            child: Text(
-              'Ver historial completo',
-              style: TextStyle(fontSize: 16),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: () => Navigator.pushReplacementNamed(context, '/history'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CardLine extends StatelessWidget {
   const _CardLine();
 
@@ -729,3 +697,4 @@ class _BarData {
     this.strong,
   );
 }
+
