@@ -1,7 +1,94 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/session_service.dart';
+import '../../services/attendance_service.dart';
 import '../shared/app_shell.dart';
+
+const int _requiredMinutesPerDay = 8 * 60;
+
+bool _hasValue(dynamic value) {
+  if (value == null) return false;
+  if (value is String) return value.trim().isNotEmpty;
+  return true;
+}
+
+DateTime? _parseBackendDateTime(dynamic value) {
+  if (!_hasValue(value)) return null;
+  final normalized = value.toString().trim().replaceFirst(' ', 'T');
+  return DateTime.tryParse(normalized);
+}
+
+int _intFromBackend(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+String _formatBackendTime(BuildContext context, dynamic value) {
+  final dateTime = _parseBackendDateTime(value);
+  if (dateTime == null) return '--:--';
+  return MaterialLocalizations.of(context).formatTimeOfDay(
+    TimeOfDay.fromDateTime(dateTime),
+    alwaysUse24HourFormat: false,
+  );
+}
+
+String _formatDurationFromMinutes(int minutes, {bool showSign = false}) {
+  final sign = minutes < 0 ? '-' : (showSign && minutes > 0 ? '+' : '');
+  final absoluteMinutes = minutes.abs();
+  final hours = absoluteMinutes ~/ 60;
+  final remainingMinutes = absoluteMinutes % 60;
+  return '$sign${hours.toString().padLeft(2, '0')}h '
+      '${remainingMinutes.toString().padLeft(2, '0')}m';
+}
+
+class _StatusStyle {
+  final String label;
+  final Color badgeColor;
+  final Color textColor;
+
+  const _StatusStyle({
+    required this.label,
+    required this.badgeColor,
+    required this.textColor,
+  });
+}
+
+_StatusStyle _statusStyle(Map<String, dynamic>? attendanceData) {
+  final status = attendanceData?["status"]?.toString().toLowerCase();
+  final hasCheckIn = _hasValue(attendanceData?["check_in"]);
+  final hasCheckOut = _hasValue(attendanceData?["check_out"]);
+
+  if (status == "completed" || hasCheckOut) {
+    return const _StatusStyle(
+      label: 'Completado',
+      badgeColor: Color(0xFFE6F4E8),
+      textColor: AppColors.green,
+    );
+  }
+
+  if (status == "pending") {
+    return const _StatusStyle(
+      label: 'Pendiente',
+      badgeColor: Color(0xFFF1F1F1),
+      textColor: Colors.grey,
+    );
+  }
+
+  if (status == "in_progress" || status == "in progress" || hasCheckIn) {
+    return const _StatusStyle(
+      label: 'En progreso',
+      badgeColor: Color(0xFFFFF4D6),
+      textColor: AppColors.amber,
+    );
+  }
+
+  return const _StatusStyle(
+    label: 'Pendiente',
+    badgeColor: Color(0xFFF1F1F1),
+    textColor: Colors.grey,
+  );
+}
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -11,28 +98,56 @@ class AttendanceScreen extends StatefulWidget {
 }
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
-  bool checkedIn = false;
-  bool checkedOut = false;
   late Timer timer;
   DateTime now = DateTime.now();
+  Map<String, dynamic>? attendanceData;
+
+  bool get checkedIn => _hasValue(attendanceData?["check_in"]);
+
+  bool get checkedOut =>
+      _hasValue(attendanceData?["check_out"]) ||
+      attendanceData?["status"]?.toString().toLowerCase() == "completed";
 
   @override
   void initState() {
     super.initState();
     _loadState();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
       setState(() => now = DateTime.now());
     });
   }
 
+  @override
+  void reassemble() {
+    super.reassemble();
+    _loadState();
+  }
+
   Future<void> _loadState() async {
-    final savedIn = await SessionService.hasCheckedIn();
-    final savedOut = await SessionService.hasCheckedOut();
-    if (mounted) {
+    try {
+      final user = await SessionService.getUser();
+
+      if (user == null) {
+        if (!mounted) return;
+        setState(() => attendanceData = null);
+        return;
+      }
+
+      final int userId = int.parse(user["id"].toString());
+
+      final response = await AttendanceService.getTodayAttendance(userId);
+      final attendance = response["attendance"];
+
+      if (!mounted) return;
       setState(() {
-        checkedIn = savedIn;
-        checkedOut = savedOut;
+        attendanceData = attendance is Map
+            ? Map<String, dynamic>.from(attendance)
+            : null;
       });
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage('No se pudo cargar la asistencia de hoy');
     }
   }
 
@@ -86,18 +201,48 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Future<void> _registerAttendance() async {
-    if (!checkedIn) {
-      setState(() => checkedIn = true);
-      await SessionService.setCheckIn(true);
-      await SessionService.setCheckOut(false);
-      _showMessage('Entrada registrada');
-      return;
-    }
+    try {
+      final user = await SessionService.getUser();
 
-    if (!checkedOut) {
-      setState(() => checkedOut = true);
-      await SessionService.setCheckOut(true);
-      _showMessage('Salida registrada');
+      if (user == null) {
+        _showMessage('Sesion no encontrada');
+        return;
+      }
+
+      final int userId = int.parse(user["id"].toString());
+
+      final response = await AttendanceService.registerAttendance(userId);
+
+      final successValue = response["success"];
+      final bool success =
+          successValue == true || successValue?.toString() == "true";
+
+      if (!success) {
+        _showMessage(
+          (response["message"] ?? 'No se pudo registrar la asistencia')
+              .toString(),
+        );
+        return;
+      }
+
+      final String type = response["type"]?.toString() ?? "";
+
+      if (type == "check_in") {
+        await _loadState();
+        _showMessage('Entrada registrada');
+        return;
+      }
+
+      if (type == "check_out") {
+        await _loadState();
+        _showMessage('Salida registrada');
+        return;
+      }
+
+      await _loadState();
+      _showMessage('Asistencia actualizada');
+    } catch (e) {
+      _showMessage('Error de conexion');
     }
   }
 
@@ -115,38 +260,35 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFFAF7),
-     body: SafeArea(
-  child: Column(
-    children: [
-
-      const Padding(
-        padding: EdgeInsets.fromLTRB(18, 16, 18, 0),
-        child: _Header(),
-      ),
-
-      const SizedBox(height: 22),
-
-      Expanded(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 110),
+      body: SafeArea(
+        child: Column(
           children: [
-
-            _MainAttendanceCard(
-              time: _time,
-              period: _period,
-              date: _currentDate,
-              buttonTitle: _buttonTitle,
-              buttonSubtitle: _buttonSubtitle,
-              buttonIcon: _buttonIcon,
-              checkedOut: checkedOut,
-              onTap: _registerAttendance,
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 16, 18, 0),
+              child: _Header(),
             ),
-                 ],
+            const SizedBox(height: 22),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 110),
+                children: [
+                  _MainAttendanceCard(
+                    time: _time,
+                    period: _period,
+                    date: _currentDate,
+                    buttonTitle: _buttonTitle,
+                    buttonSubtitle: _buttonSubtitle,
+                    buttonIcon: _buttonIcon,
+                    checkedOut: checkedOut,
+                    attendanceData: attendanceData,
+                    onTap: _registerAttendance,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-    ],
-  ),
-),
       bottomNavigationBar: const _AttendanceBottomNav(),
     );
   }
@@ -189,6 +331,7 @@ class _MainAttendanceCard extends StatelessWidget {
   final String buttonSubtitle;
   final IconData buttonIcon;
   final bool checkedOut;
+  final Map<String, dynamic>? attendanceData;
   final VoidCallback onTap;
 
   const _MainAttendanceCard({
@@ -200,6 +343,7 @@ class _MainAttendanceCard extends StatelessWidget {
     required this.buttonIcon,
     required this.checkedOut,
     required this.onTap,
+    required this.attendanceData,
   });
 
   @override
@@ -270,7 +414,10 @@ class _MainAttendanceCard extends StatelessWidget {
           const SizedBox(height: 28),
           const _LocationCard(),
           const SizedBox(height: 18),
-          _DaySummary(checkedOut: checkedOut),
+          _DaySummary(
+            checkedOut: checkedOut,
+            attendanceData: attendanceData,
+          ),
           const SizedBox(height: 18),
           _ReminderCard(checkedOut: checkedOut),
         ],
@@ -435,11 +582,22 @@ class _LocationCard extends StatelessWidget {
 
 class _DaySummary extends StatelessWidget {
   final bool checkedOut;
+  final Map<String, dynamic>? attendanceData;
 
-  const _DaySummary({required this.checkedOut});
+  const _DaySummary({
+    required this.checkedOut,
+    required this.attendanceData,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final statusStyle = _statusStyle(attendanceData);
+    final workedMinutes = _intFromBackend(attendanceData?["worked_minutes"]);
+    final balanceMinutes = workedMinutes - _requiredMinutesPerDay;
+    final checkInTime = _formatBackendTime(context, attendanceData?["check_in"]);
+    final checkOutTime =
+        _formatBackendTime(context, attendanceData?["check_out"]);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -449,7 +607,6 @@ class _DaySummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
           const Row(
             children: [
               Icon(Icons.bar_chart, color: AppColors.brown),
@@ -464,9 +621,7 @@ class _DaySummary extends StatelessWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 20),
-
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
@@ -476,12 +631,10 @@ class _DaySummary extends StatelessWidget {
             ),
             child: Column(
               children: [
-
                 Padding(
                   padding: const EdgeInsets.all(18),
                   child: Row(
                     children: [
-
                       Container(
                         width: 72,
                         height: 72,
@@ -495,27 +648,22 @@ class _DaySummary extends StatelessWidget {
                           size: 36,
                         ),
                       ),
-
                       const SizedBox(width: 16),
-
                       const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-
                             Text(
-                              'Horario asignado',
+                              'Jornada requerida',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 22,
                                 color: AppColors.darkBrown,
                               ),
                             ),
-
                             SizedBox(height: 8),
-
                             Text(
-                              '09:00 AM - 06:00 PM',
+                              '8h 00m',
                               style: TextStyle(
                                 fontSize: 20,
                                 color: AppColors.brown,
@@ -527,51 +675,40 @@ class _DaySummary extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                
-
                 _PremiumStatusRow(
                   icon: Icons.login,
                   title: 'Entrada registrada',
-                  value: '08:54 AM',
-                  badge: 'Temprano',
-                  badgeColor: Color(0xFFE6F4E8),
-                  textColor: AppColors.green,
+                  value: checkInTime,
+                  badge: checkedOut ? 'Completado' : statusStyle.label,
+                  badgeColor: checkedOut
+                      ? const Color(0xFFE6F4E8)
+                      : statusStyle.badgeColor,
+                  textColor:
+                      checkedOut ? AppColors.green : statusStyle.textColor,
                 ),
-
                 const Divider(
                   height: 1,
                   color: Color(0xFFEAD9D1),
                 ),
-
                 _PremiumStatusRow(
                   icon: Icons.logout,
                   title: 'Salida registrada',
-                  value: checkedOut ? '06:00 PM' : '--:--',
-                  badge: checkedOut ? 'Completado' : 'Pendiente',
-                  badgeColor: checkedOut
-                      ? const Color(0xFFE6F4E8)
-                      : const Color(0xFFF1F1F1),
-                  textColor: checkedOut
-                      ? AppColors.green
-                      : Colors.grey,
+                  value: checkOutTime,
+                  badge: statusStyle.label,
+                  badgeColor: statusStyle.badgeColor,
+                  textColor: statusStyle.textColor,
                 ),
-
                 const Divider(
                   height: 1,
                   color: Color(0xFFEAD9D1),
                 ),
-
-                
+                _DayStateRow(statusStyle: statusStyle),
               ],
             ),
           ),
-
           const SizedBox(height: 22),
-
           Row(
             children: [
-
               const Expanded(
                 child: _SummaryMetric(
                   icon: Icons.work_outline,
@@ -579,25 +716,24 @@ class _DaySummary extends StatelessWidget {
                   value: '8h 00m',
                 ),
               ),
-
               const SizedBox(width: 10),
-
               Expanded(
                 child: _SummaryMetric(
                   icon: Icons.timer_outlined,
                   label: 'Horas trabajadas',
-                  value: checkedOut ? '08h 00m' : '00h 00m',
+                  value: _formatDurationFromMinutes(workedMinutes),
                 ),
               ),
-
               const SizedBox(width: 10),
-
               Expanded(
                 child: _SummaryMetric(
                   icon: Icons.balance,
                   label: 'Balance del dia',
-                  value: checkedOut ? '+00h 00m' : '00h 00m',
-                  color: const Color(0xFFC7673D),
+                  value: _formatDurationFromMinutes(
+                    balanceMinutes,
+                    showSign: true,
+                  ),
+                  color: balanceMinutes < 0 ? AppColors.red : AppColors.green,
                 ),
               ),
             ],
@@ -700,8 +836,10 @@ class _PremiumStatusRow extends StatelessWidget {
   }
 }
 
-class _PremiumDayState extends StatelessWidget {
-  const _PremiumDayState();
+class _DayStateRow extends StatelessWidget {
+  final _StatusStyle statusStyle;
+
+  const _DayStateRow({required this.statusStyle});
 
   @override
   Widget build(BuildContext context) {
@@ -709,7 +847,6 @@ class _PremiumDayState extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       child: Row(
         children: [
-
           Container(
             width: 56,
             height: 56,
@@ -723,9 +860,7 @@ class _PremiumDayState extends StatelessWidget {
               size: 28,
             ),
           ),
-
           const SizedBox(width: 16),
-
           const Expanded(
             child: Text(
               'Estado del dia',
@@ -735,32 +870,28 @@ class _PremiumDayState extends StatelessWidget {
               ),
             ),
           ),
-
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 8,
             ),
             decoration: BoxDecoration(
-              color: const Color(0xFFE6F4E8),
+              color: statusStyle.badgeColor,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-
                 Icon(
                   Icons.circle,
                   size: 10,
-                  color: AppColors.green,
+                  color: statusStyle.textColor,
                 ),
-
-                SizedBox(width: 6),
-
+                const SizedBox(width: 6),
                 Text(
-                  'A tiempo',
+                  statusStyle.label,
                   style: TextStyle(
-                    color: AppColors.green,
+                    color: statusStyle.textColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -816,19 +947,6 @@ class _SummaryMetric extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _MetricDivider extends StatelessWidget {
-  const _MetricDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 104,
-      color: const Color(0xFFEEDFD8),
     );
   }
 }

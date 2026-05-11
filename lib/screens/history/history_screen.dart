@@ -1,77 +1,268 @@
 import 'package:flutter/material.dart';
+
+import '../../services/attendance_service.dart';
+import '../../services/session_service.dart';
 import '../shared/app_shell.dart';
 import '../shared/design_bottom_nav.dart';
 
-class HistoryScreen extends StatelessWidget {
+const int _requiredMinutesPerDay = 8 * 60;
+
+enum _HistoryFilter { today, week, month, custom }
+
+enum _HistoryStatus {
+  completed,
+  working,
+  late,
+  missing,
+  permission,
+  vacation,
+  incomplete,
+}
+
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
   @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  _HistoryFilter _filter = _HistoryFilter.week;
+  DateTime _anchorDate = DateTime.now();
+  DateTimeRange? _customRange;
+  List<_HistoryRecord> _records = [];
+  _HistorySummary _summary = const _HistorySummary(
+    workedMinutes: 0,
+    requiredMinutes: 0,
+  );
+  bool _loading = false;
+
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTimeRange get _currentRange {
+    final date = DateTime(_anchorDate.year, _anchorDate.month, _anchorDate.day);
+
+    switch (_filter) {
+      case _HistoryFilter.today:
+        return DateTimeRange(start: date, end: date);
+      case _HistoryFilter.week:
+        final start = date.subtract(Duration(days: date.weekday - 1));
+        return DateTimeRange(start: start, end: start.add(const Duration(days: 6)));
+      case _HistoryFilter.month:
+        return DateTimeRange(
+          start: DateTime(date.year, date.month, 1),
+          end: DateTime(date.year, date.month + 1, 0),
+        );
+      case _HistoryFilter.custom:
+        return _customRange ?? DateTimeRange(start: date, end: date);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    final range = _currentRange;
+
+    try {
+      setState(() => _loading = true);
+
+      final user = await SessionService.getUser();
+      final userId = int.tryParse(user?["id"]?.toString() ?? '');
+
+      if (user == null || userId == null) {
+        if (!mounted) return;
+        setState(() {
+          _records = [];
+          _summary = const _HistorySummary(workedMinutes: 0, requiredMinutes: 0);
+          _loading = false;
+        });
+        return;
+      }
+
+      final response = await AttendanceService.getAttendanceHistory(
+        userId: userId,
+        startDate: _dateKey(range.start),
+        endDate: _dateKey(range.end),
+      );
+
+      final rows = response["attendances"];
+      final byDate = <String, Map<String, dynamic>>{};
+
+      if (rows is List) {
+        for (final item in rows) {
+          if (item is! Map) continue;
+          final row = Map<String, dynamic>.from(item);
+          final date = row["attendance_date"]?.toString();
+          if (date != null && date.isNotEmpty) {
+            byDate[date] = row;
+          }
+        }
+      }
+
+      final records = _buildRecords(range, byDate);
+      final summary = _buildSummary(range, byDate);
+
+      if (!mounted || !_sameRange(range, _currentRange)) return;
+      setState(() {
+        _records = records;
+        _summary = summary;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo cargar el historial'),
+          backgroundColor: AppColors.red,
+        ),
+      );
+    }
+  }
+
+  List<_HistoryRecord> _buildRecords(
+    DateTimeRange range,
+    Map<String, Map<String, dynamic>> byDate,
+  ) {
+    final records = <_HistoryRecord>[];
+    final today = _today;
+
+    for (var date = range.end;
+        !date.isBefore(range.start);
+        date = date.subtract(const Duration(days: 1))) {
+      final normalizedDate = DateTime(date.year, date.month, date.day);
+      if (normalizedDate.isAfter(today)) continue;
+
+      final row = byDate[_dateKey(normalizedDate)];
+      if (row != null) {
+        records.add(_HistoryRecord.fromAttendance(normalizedDate, row));
+        continue;
+      }
+
+      if (normalizedDate.weekday != DateTime.sunday &&
+          normalizedDate.isBefore(today)) {
+        records.add(_HistoryRecord.missing(normalizedDate));
+      }
+    }
+
+    return records;
+  }
+
+  _HistorySummary _buildSummary(
+    DateTimeRange range,
+    Map<String, Map<String, dynamic>> byDate,
+  ) {
+    var workedMinutes = 0;
+    var requiredDays = 0;
+    final today = _today;
+
+    for (var date = range.start;
+        !date.isAfter(range.end);
+        date = date.add(const Duration(days: 1))) {
+      final normalizedDate = DateTime(date.year, date.month, date.day);
+      if (normalizedDate.isAfter(today)) continue;
+      if (normalizedDate.weekday == DateTime.sunday) continue;
+
+      requiredDays++;
+      final row = byDate[_dateKey(normalizedDate)];
+      if (row != null) {
+        workedMinutes += _workedMinutesFromRow(row);
+      }
+    }
+
+    return _HistorySummary(
+      workedMinutes: workedMinutes,
+      requiredMinutes: requiredDays * _requiredMinutesPerDay,
+    );
+  }
+
+  void _selectFilter(_HistoryFilter filter) async {
+    if (filter == _HistoryFilter.custom) {
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: _today,
+        initialDateRange: _safeInitialRange(_customRange ?? _currentRange),
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: Theme.of(context).colorScheme.copyWith(
+                    primary: AppColors.brown,
+                    onPrimary: Colors.white,
+                  ),
+            ),
+            child: child!,
+          );
+        },
+      );
+
+      if (picked == null) return;
+      setState(() {
+        _filter = filter;
+        _customRange = picked;
+        _anchorDate = picked.start;
+      });
+      await _loadHistory();
+      return;
+    }
+
+    setState(() => _filter = filter);
+    await _loadHistory();
+  }
+
+  void _movePeriod(int direction) {
+    setState(() {
+      switch (_filter) {
+        case _HistoryFilter.today:
+          _anchorDate = _anchorDate.add(Duration(days: direction));
+          break;
+        case _HistoryFilter.week:
+          _anchorDate = _anchorDate.add(Duration(days: direction * 7));
+          break;
+        case _HistoryFilter.month:
+          _anchorDate = DateTime(
+            _anchorDate.year,
+            _anchorDate.month + direction,
+            1,
+          );
+          break;
+        case _HistoryFilter.custom:
+          final range = _currentRange;
+          final days = range.duration.inDays + 1;
+          final shifted = DateTimeRange(
+            start: range.start.add(Duration(days: direction * days)),
+            end: range.end.add(Duration(days: direction * days)),
+          );
+          _customRange = shifted;
+          _anchorDate = shifted.start;
+          break;
+      }
+    });
+    _loadHistory();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final records = [
-      _HistoryRecord(
-        day: 'Lunes',
-        date: '20 May',
-        entry: '09:02 AM',
-        exit: '06:10 PM',
-        total: '08h 08m',
-        status: 'Completo',
-        statusColor: AppColors.green,
-        statusBg: const Color(0xFFE8F5E9),
-        statusIcon: Icons.check_circle_outline,
-      ),
-      _HistoryRecord(
-        day: 'Martes',
-        date: '21 May',
-        entry: '08:55 AM',
-        exit: '06:05 PM',
-        total: '08h 10m',
-        status: 'Completo',
-        statusColor: AppColors.green,
-        statusBg: const Color(0xFFE8F5E9),
-        statusIcon: Icons.check_circle_outline,
-        highlightTotal: true,
-      ),
-      _HistoryRecord(
-        day: 'Miercoles',
-        date: '22 May',
-        entry: '09:10 AM',
-        exit: '06:00 PM',
-        total: '07h 50m',
-        status: 'Incompleto',
-        statusColor: const Color(0xFFE27A22),
-        statusBg: const Color(0xFFFFF1DF),
-        statusIcon: Icons.schedule,
-      ),
-      _HistoryRecord(
-        day: 'Jueves',
-        date: '23 May',
-        entry: '09:05 AM',
-        exit: '06:15 PM',
-        total: '08h 10m',
-        status: 'Completo',
-        statusColor: AppColors.green,
-        statusBg: const Color(0xFFE8F5E9),
-        statusIcon: Icons.check_circle_outline,
-      ),
-      _HistoryRecord(
-        day: 'Viernes',
-        date: '24 May',
-        entry: '09:20 AM',
-        exit: '06:30 PM',
-        total: '07h 10m',
-        status: 'Tardanza',
-        statusColor: AppColors.red,
-        statusBg: const Color(0xFFFFE2E3),
-        statusIcon: Icons.error,
-      ),
-    ];
+    final range = _currentRange;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFFAF7),
       body: SafeArea(
         child: Column(
           children: [
-
             const Padding(
               padding: EdgeInsets.fromLTRB(
                 AppSpacing.page,
@@ -81,9 +272,7 @@ class HistoryScreen extends StatelessWidget {
               ),
               child: _Header(),
             ),
-
             const SizedBox(height: 20),
-
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
@@ -93,29 +282,48 @@ class HistoryScreen extends StatelessWidget {
                   AppSpacing.bottomPadding,
                 ),
                 children: [
-            _ShellCard(
-              child: Column(
-                children: [
-                  const _Tabs(),
-                  const SizedBox(height: 16),
-                  const _PeriodSelector(),
-                  const SizedBox(height: 14),
-                  ...records.map((record) => _RecordCard(record: record)),
-                  const _NoRecordCard(day: 'Sabado', date: '25 May'),
-                  const _NoRecordCard(day: 'Domingo', date: '26 May'),
-                  const SizedBox(height: 8),
-                  const _PeriodSummary(),
-                  const SizedBox(height: 16),
-                  const _CorrectionCard(),
+                  _ShellCard(
+                    child: Column(
+                      children: [
+                        _Tabs(
+                          selected: _filter,
+                          onChanged: _selectFilter,
+                        ),
+                        const SizedBox(height: 16),
+                        _PeriodSelector(
+                          label: _periodLabel(range),
+                          onPrevious: () => _movePeriod(-1),
+                          onNext: () => _movePeriod(1),
+                        ),
+                        if (_loading) ...[
+                          const SizedBox(height: 12),
+                          const LinearProgressIndicator(
+                            minHeight: 2,
+                            color: AppColors.brown,
+                            backgroundColor: Color(0xFFF3E6DD),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        if (_records.isEmpty && !_loading)
+                          const _EmptyHistoryCard()
+                        else
+                          ..._records.map((record) => _RecordCard(record: record)),
+                        const SizedBox(height: 8),
+                        _PeriodSummary(
+                          rangeLabel: _summaryRangeLabel(range),
+                          summary: _summary,
+                        ),
+                        const SizedBox(height: 16),
+                        const _CorrectionCard(),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
-    ],
-  ),
-),
       bottomNavigationBar: const DesignBottomNav(activeIndex: 1),
     );
   }
@@ -128,7 +336,6 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-
         const Expanded(
           child: Text(
             'Historial',
@@ -140,7 +347,6 @@ class _Header extends StatelessWidget {
             ),
           ),
         ),
-
         Container(
           width: 54,
           height: 54,
@@ -164,6 +370,7 @@ class _Header extends StatelessWidget {
     );
   }
 }
+
 class _ShellCard extends StatelessWidget {
   final Widget child;
 
@@ -190,22 +397,48 @@ class _ShellCard extends StatelessWidget {
 }
 
 class _Tabs extends StatelessWidget {
-  const _Tabs();
+  final _HistoryFilter selected;
+  final ValueChanged<_HistoryFilter> onChanged;
+
+  const _Tabs({
+    required this.selected,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
-        Expanded(child: _TabItem(label: 'Hoy')),
-        SizedBox(width: 8),
-        Expanded(child: _TabItem(label: 'Semana', selected: true)),
-        SizedBox(width: 8),
-        Expanded(child: _TabItem(label: 'Mes')),
-        SizedBox(width: 8),
+      children: [
+        Expanded(
+          child: _TabItem(
+            label: 'Hoy',
+            selected: selected == _HistoryFilter.today,
+            onTap: () => onChanged(_HistoryFilter.today),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _TabItem(
+            label: 'Semana',
+            selected: selected == _HistoryFilter.week,
+            onTap: () => onChanged(_HistoryFilter.week),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _TabItem(
+            label: 'Mes',
+            selected: selected == _HistoryFilter.month,
+            onTap: () => onChanged(_HistoryFilter.month),
+          ),
+        ),
+        const SizedBox(width: 8),
         Expanded(
           child: _TabItem(
             label: 'Personalizado',
             trailing: Icons.calendar_month_outlined,
+            selected: selected == _HistoryFilter.custom,
+            onTap: () => onChanged(_HistoryFilter.custom),
           ),
         ),
       ],
@@ -217,56 +450,70 @@ class _TabItem extends StatelessWidget {
   final String label;
   final bool selected;
   final IconData? trailing;
+  final VoidCallback onTap;
 
   const _TabItem({
     required this.label,
+    required this.onTap,
     this.selected = false,
     this.trailing,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        gradient: selected
-            ? const LinearGradient(
-                colors: [Color(0xFF6F3A28), Color(0xFF9B5B3D)],
-              )
-            : null,
-        color: selected ? null : const Color(0xFFFBF5F1),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: selected ? Colors.white : AppColors.darkBrown,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          gradient: selected
+              ? const LinearGradient(
+                  colors: [Color(0xFF6F3A28), Color(0xFF9B5B3D)],
+                )
+              : null,
+          color: selected ? null : const Color(0xFFFBF5F1),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : AppColors.darkBrown,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
             ),
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: 5),
-            Icon(
-              trailing,
-              size: 18,
-              color: selected ? Colors.white : AppColors.brown,
-            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 5),
+              Icon(
+                trailing,
+                size: 18,
+                color: selected ? Colors.white : AppColors.brown,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
 class _PeriodSelector extends StatelessWidget {
-  const _PeriodSelector();
+  final String label;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  const _PeriodSelector({
+    required this.label,
+    required this.onPrevious,
+    required this.onNext,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -277,19 +524,25 @@ class _PeriodSelector extends StatelessWidget {
         color: const Color(0xFFFBF5F1),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.calendar_month_outlined, color: AppColors.brown),
-          SizedBox(width: 12),
+          const Icon(Icons.calendar_month_outlined, color: AppColors.brown),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
-              '13 de mayo - 19 de mayo, 2024',
-              style: TextStyle(fontSize: 16, color: AppColors.darkBrown),
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, color: AppColors.darkBrown),
             ),
           ),
-          Icon(Icons.chevron_left, color: AppColors.darkBrown),
-          SizedBox(width: 16),
-          Icon(Icons.chevron_right, color: AppColors.darkBrown),
+          IconButton(
+            onPressed: onPrevious,
+            icon: const Icon(Icons.chevron_left, color: AppColors.darkBrown),
+          ),
+          IconButton(
+            onPressed: onNext,
+            icon: const Icon(Icons.chevron_right, color: AppColors.darkBrown),
+          ),
         ],
       ),
     );
@@ -317,8 +570,11 @@ class _RecordCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '${record.day} • ${record.date}',
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  '${record.day} - ${record.date}',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               _StatusBadge(record: record),
@@ -328,18 +584,37 @@ class _RecordCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _TimeColumn(icon: Icons.schedule, iconColor: AppColors.green, label: 'Entrada', value: record.entry)),
-              Expanded(child: _TimeColumn(icon: Icons.schedule, iconColor: AppColors.red, label: 'Salida', value: record.exit)),
+              Expanded(
+                child: _TimeColumn(
+                  icon: Icons.schedule,
+                  iconColor: AppColors.green,
+                  label: 'Entrada',
+                  value: record.entry,
+                ),
+              ),
+              Expanded(
+                child: _TimeColumn(
+                  icon: Icons.schedule,
+                  iconColor: AppColors.red,
+                  label: 'Salida',
+                  value: record.exit,
+                ),
+              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                    const Text(
+                      'Total',
+                      style: TextStyle(fontSize: 12, color: AppColors.muted),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       record.total,
                       style: TextStyle(
-                        color: record.highlightTotal ? AppColors.brown : Colors.black,
+                        color: record.highlightTotal
+                            ? AppColors.brown
+                            : Colors.black,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -393,50 +668,6 @@ class _TimeColumn extends StatelessWidget {
   }
 }
 
-class _NoRecordCard extends StatelessWidget {
-  final String day;
-  final String date;
-
-  const _NoRecordCard({required this.day, required this.date});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFEEDFD8)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text('$day • $date', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-          ),
-          const Text('No hay registros', style: TextStyle(color: AppColors.muted)),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0ECEB),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.remove_circle_outline,
-                    color: Colors.black54, size: 18),
-                SizedBox(width: 6),
-                Text('Sin registro', style: TextStyle(color: Colors.black54)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _StatusBadge extends StatelessWidget {
   final _HistoryRecord record;
 
@@ -456,7 +687,7 @@ class _StatusBadge extends StatelessWidget {
           Icon(record.statusIcon, color: record.statusColor, size: 17),
           const SizedBox(width: 5),
           Text(
-            record.status,
+            record.statusLabel,
             style: TextStyle(
               color: record.statusColor,
               fontWeight: FontWeight.bold,
@@ -468,29 +699,92 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _PeriodSummary extends StatelessWidget {
-  const _PeriodSummary();
+class _EmptyHistoryCard extends StatelessWidget {
+  const _EmptyHistoryCard();
 
   @override
   Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEEDFD8)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.history, color: AppColors.muted),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'No hay registros para este periodo',
+              style: TextStyle(color: AppColors.muted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeriodSummary extends StatelessWidget {
+  final String rangeLabel;
+  final _HistorySummary summary;
+
+  const _PeriodSummary({
+    required this.rangeLabel,
+    required this.summary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final balance = summary.balanceMinutes;
+    final balanceColor = balance >= 0 ? AppColors.green : AppColors.red;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF8F3),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Resumen del periodo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          SizedBox(height: 4),
-          Text('(13 - 19 de mayo)', style: TextStyle(color: AppColors.muted)),
-          SizedBox(height: 14),
+          const Text(
+            'Resumen del periodo',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 4),
+          Text(rangeLabel, style: const TextStyle(color: AppColors.muted)),
+          const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: _SummaryBox(icon: Icons.schedule, iconColor: AppColors.green, label: 'Trabajadas', value: '39h 18m')),
-              Expanded(child: _SummaryBox(icon: Icons.history, iconColor: Color(0xFFE27A22), label: 'Requeridas', value: '48h 00m')),
-              Expanded(child: _SummaryBox(icon: Icons.trending_up, iconColor: AppColors.green, label: 'Balance', value: '+08h', valueColor: AppColors.green)),
+              Expanded(
+                child: _SummaryBox(
+                  icon: Icons.schedule,
+                  iconColor: AppColors.green,
+                  label: 'Trabajadas',
+                  value: _formatDuration(summary.workedMinutes),
+                ),
+              ),
+              Expanded(
+                child: _SummaryBox(
+                  icon: Icons.history,
+                  iconColor: const Color(0xFFE27A22),
+                  label: 'Requeridas',
+                  value: _formatDuration(summary.requiredMinutes),
+                ),
+              ),
+              Expanded(
+                child: _SummaryBox(
+                  icon: Icons.trending_up,
+                  iconColor: balanceColor,
+                  label: 'Balance',
+                  value: _formatDuration(balance, showSign: true),
+                  valueColor: balanceColor,
+                ),
+              ),
             ],
           ),
         ],
@@ -563,7 +857,9 @@ class _CorrectionCard extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 SizedBox(height: 4),
-                Text('Comunicate con tu administrador para solicitar una correccion.'),
+                Text(
+                  'Comunicate con tu administrador para solicitar una correccion.',
+                ),
               ],
             ),
           ),
@@ -574,40 +870,336 @@ class _CorrectionCard extends StatelessWidget {
   }
 }
 
-class _VerticalLine extends StatelessWidget {
-  final double height;
+class _HistorySummary {
+  final int workedMinutes;
+  final int requiredMinutes;
 
-  const _VerticalLine({required this.height});
+  const _HistorySummary({
+    required this.workedMinutes,
+    required this.requiredMinutes,
+  });
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(width: 1, height: height, color: const Color(0xFFEEDFD8));
-  }
+  int get balanceMinutes => workedMinutes - requiredMinutes;
 }
 
 class _HistoryRecord {
-  final String day;
-  final String date;
+  final DateTime recordDate;
   final String entry;
   final String exit;
   final String total;
-  final String status;
-  final Color statusColor;
-  final Color statusBg;
-  final IconData statusIcon;
+  final _HistoryStatus status;
   final bool highlightTotal;
 
   const _HistoryRecord({
-    required this.day,
-    required this.date,
+    required this.recordDate,
     required this.entry,
     required this.exit,
     required this.total,
     required this.status,
-    required this.statusColor,
-    required this.statusBg,
-    required this.statusIcon,
     this.highlightTotal = false,
   });
+
+  factory _HistoryRecord.fromAttendance(
+    DateTime date,
+    Map<String, dynamic> row,
+  ) {
+    final status = _statusFromRow(row);
+    final workedMinutes = _workedMinutesFromRow(row);
+
+    return _HistoryRecord(
+      recordDate: date,
+      entry: _formatBackendTime(row["check_in"]),
+      exit: _formatBackendTime(row["check_out"]),
+      total: _formatDuration(workedMinutes),
+      status: status,
+      highlightTotal: workedMinutes >= _requiredMinutesPerDay,
+    );
+  }
+
+  factory _HistoryRecord.missing(DateTime date) {
+    return _HistoryRecord(
+      recordDate: date,
+      entry: '--:--',
+      exit: '--:--',
+      total: '00h 00m',
+      status: _HistoryStatus.missing,
+    );
+  }
+
+  String get day => _weekdayName(recordDate);
+
+  String get dateLabel => _shortDateLabel(recordDate);
+
+  String get statusLabel {
+    switch (status) {
+      case _HistoryStatus.completed:
+        return 'Completo';
+      case _HistoryStatus.working:
+        return 'En jornada';
+      case _HistoryStatus.late:
+        return 'Tardanza';
+      case _HistoryStatus.missing:
+        return 'Sin registro';
+      case _HistoryStatus.permission:
+        return 'Permiso';
+      case _HistoryStatus.vacation:
+        return 'Vacaciones';
+      case _HistoryStatus.incomplete:
+        return 'Incompleto';
+    }
+  }
+
+  String get date => dateLabel;
+
+  Color get statusColor {
+    switch (status) {
+      case _HistoryStatus.completed:
+        return AppColors.green;
+      case _HistoryStatus.working:
+        return AppColors.brown;
+      case _HistoryStatus.late:
+      case _HistoryStatus.incomplete:
+        return const Color(0xFFE27A22);
+      case _HistoryStatus.missing:
+        return Colors.black54;
+      case _HistoryStatus.permission:
+        return const Color(0xFF8E5DCC);
+      case _HistoryStatus.vacation:
+        return const Color(0xFF3D7DFF);
+    }
+  }
+
+  Color get statusBg {
+    switch (status) {
+      case _HistoryStatus.completed:
+        return const Color(0xFFE8F5E9);
+      case _HistoryStatus.working:
+        return const Color(0xFFFFF1DF);
+      case _HistoryStatus.late:
+      case _HistoryStatus.incomplete:
+        return const Color(0xFFFFF1DF);
+      case _HistoryStatus.missing:
+        return const Color(0xFFF0ECEB);
+      case _HistoryStatus.permission:
+        return const Color(0xFFF0E8FF);
+      case _HistoryStatus.vacation:
+        return const Color(0xFFE9F0FF);
+    }
+  }
+
+  IconData get statusIcon {
+    switch (status) {
+      case _HistoryStatus.completed:
+        return Icons.check_circle_outline;
+      case _HistoryStatus.working:
+        return Icons.work_history_outlined;
+      case _HistoryStatus.late:
+        return Icons.error_outline;
+      case _HistoryStatus.missing:
+        return Icons.remove_circle_outline;
+      case _HistoryStatus.permission:
+        return Icons.event_available;
+      case _HistoryStatus.vacation:
+        return Icons.beach_access;
+      case _HistoryStatus.incomplete:
+        return Icons.schedule;
+    }
+  }
 }
 
+_HistoryStatus _statusFromRow(Map<String, dynamic> row) {
+  final status = row["status"]?.toString().toLowerCase().trim();
+  final hasCheckIn = _hasValue(row["check_in"]);
+  final hasCheckOut = _hasValue(row["check_out"]);
+
+  switch (status) {
+    case 'completed':
+    case 'complete':
+      return _HistoryStatus.completed;
+    case 'working':
+    case 'in_progress':
+    case 'in progress':
+      return _HistoryStatus.working;
+    case 'late':
+    case 'tardanza':
+      return _HistoryStatus.late;
+    case 'missing':
+    case 'falta':
+      return _HistoryStatus.missing;
+    case 'permission':
+    case 'permiso':
+      return _HistoryStatus.permission;
+    case 'vacation':
+    case 'vacaciones':
+      return _HistoryStatus.vacation;
+    case 'incomplete':
+    case 'incompleto':
+      return _HistoryStatus.incomplete;
+    default:
+      if (hasCheckIn && hasCheckOut) return _HistoryStatus.completed;
+      if (hasCheckIn) return _HistoryStatus.working;
+      return _HistoryStatus.missing;
+  }
+}
+
+bool _hasValue(dynamic value) {
+  if (value == null) return false;
+  if (value is String) return value.trim().isNotEmpty;
+  return true;
+}
+
+int _workedMinutesFromRow(Map<String, dynamic> row) {
+  final rawMinutes = row["worked_minutes"];
+  final storedMinutes = rawMinutes is int
+      ? rawMinutes
+      : rawMinutes is num
+          ? rawMinutes.toInt()
+          : int.tryParse(rawMinutes?.toString() ?? '') ?? 0;
+
+  if (storedMinutes > 0) return storedMinutes;
+
+  final checkIn = _parseBackendDateTime(row["check_in"]);
+  final checkOut = _parseBackendDateTime(row["check_out"]);
+  if (checkIn == null || checkOut == null) return 0;
+
+  return checkOut.difference(checkIn).inMinutes;
+}
+
+DateTime? _parseBackendDateTime(dynamic value) {
+  if (!_hasValue(value)) return null;
+  return DateTime.tryParse(value.toString().trim().replaceFirst(' ', 'T'));
+}
+
+String _formatBackendTime(dynamic value) {
+  final date = _parseBackendDateTime(value);
+  if (date == null) return '--:--';
+  final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+  final minute = date.minute.toString().padLeft(2, '0');
+  final period = date.hour >= 12 ? 'PM' : 'AM';
+  return '$hour:$minute $period';
+}
+
+String _formatDuration(int minutes, {bool showSign = false}) {
+  final sign = minutes < 0 ? '-' : (showSign && minutes > 0 ? '+' : '');
+  final absolute = minutes.abs();
+  final hours = absolute ~/ 60;
+  final remainingMinutes = absolute % 60;
+  return '$sign${hours.toString().padLeft(2, '0')}h '
+      '${remainingMinutes.toString().padLeft(2, '0')}m';
+}
+
+String _dateKey(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
+String _periodLabel(DateTimeRange range) {
+  if (_isSameDay(range.start, range.end)) {
+    return _longDateLabel(range.start);
+  }
+
+  return '${_longDateLabel(range.start)} - ${_longDateLabel(range.end)}';
+}
+
+String _summaryRangeLabel(DateTimeRange range) {
+  if (_isSameDay(range.start, range.end)) {
+    return '(${_shortDateLabel(range.start)})';
+  }
+
+  return '(${_shortDateLabel(range.start)} - ${_shortDateLabel(range.end)})';
+}
+
+bool _isSameDay(DateTime first, DateTime second) {
+  return first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
+}
+
+bool _sameRange(DateTimeRange first, DateTimeRange second) {
+  return _isSameDay(first.start, second.start) &&
+      _isSameDay(first.end, second.end);
+}
+
+DateTimeRange _safeInitialRange(DateTimeRange range) {
+  final today = DateTime.now();
+  final firstDate = DateTime(2020);
+  final normalizedToday = DateTime(today.year, today.month, today.day);
+  var start = range.start.isAfter(normalizedToday)
+      ? normalizedToday
+      : DateTime(range.start.year, range.start.month, range.start.day);
+  var end = range.end.isAfter(normalizedToday)
+      ? normalizedToday
+      : DateTime(range.end.year, range.end.month, range.end.day);
+
+  if (start.isBefore(firstDate)) start = firstDate;
+  if (end.isBefore(firstDate)) end = firstDate;
+
+  if (start.isAfter(end)) {
+    return DateTimeRange(start: normalizedToday, end: normalizedToday);
+  }
+
+  return DateTimeRange(start: start, end: end);
+}
+
+String _longDateLabel(DateTime date) {
+  return '${date.day} de ${_monthName(date.month)} de ${date.year}';
+}
+
+String _shortDateLabel(DateTime date) {
+  return '${date.day} ${_shortMonthName(date.month)}';
+}
+
+String _weekdayName(DateTime date) {
+  const weekdays = [
+    'Lunes',
+    'Martes',
+    'Miercoles',
+    'Jueves',
+    'Viernes',
+    'Sabado',
+    'Domingo',
+  ];
+
+  return weekdays[date.weekday - 1];
+}
+
+String _monthName(int month) {
+  const months = [
+    '',
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
+  return months[month];
+}
+
+String _shortMonthName(int month) {
+  const months = [
+    '',
+    'Ene',
+    'Feb',
+    'Mar',
+    'Abr',
+    'May',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dic',
+  ];
+
+  return months[month];
+}
